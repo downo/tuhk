@@ -155,7 +155,7 @@ export default function Game() {
     };
     load();
     // Coming back to a window: re-read the server save so a stale window never builds on old progress.
-    const onShow = () => { if (document.visibilityState === "visible" && loaded.current && alive) { loaded.current = false; if (id) clearInterval(id); id = undefined; pending.then(() => alive && load()); } };
+    const onShow = () => { if (document.visibilityState === "visible" && loaded.current && alive) { loaded.current = false; if (id) clearInterval(id); id = undefined; pending.then(() => { if (alive) load(); }); } };
     const onHide = () => { if (loaded.current && document.visibilityState === "hidden" && ref.current) send(); };
     document.addEventListener("visibilitychange", onShow);
     document.addEventListener("visibilitychange", onHide);
