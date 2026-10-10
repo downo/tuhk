@@ -131,7 +131,14 @@ export default function Game() {
     loaded.current = false;
     if (!user) return;
     let id: ReturnType<typeof setInterval> | undefined; let alive = true; let retry: ReturnType<typeof setTimeout> | undefined;
-    const push = () => loaded.current && ref.current && document.visibilityState === "visible" && syncOnline(user, ref.current, clock(ref.current).day).catch(() => {});
+    // Another window/device saved newer progress: never overwrite it — reload the server save instead.
+    const onSyncErr = (e: unknown) => {
+      if (!alive || (e as Error)?.message !== SAVE_CONFLICT) return;
+      loaded.current = false; if (id) clearInterval(id); id = undefined;
+      setToast("Mängisid vahepeal teises aknas või seadmes — laadisin uuema salvestuse."); setTimeout(() => setToast(null), 4000);
+      load();
+    };
+    const push = () => { if (loaded.current && ref.current && document.visibilityState === "visible") syncOnline(user, ref.current, clock(ref.current).day).catch(onSyncErr); };
     const load = async () => {
       let cloud: GameState | null;
       try { cloud = await fetchCloudSave(user); }
@@ -144,7 +151,10 @@ export default function Game() {
       id = setInterval(push, 30000);
     };
     load();
-    const onHide = () => { if (loaded.current && document.visibilityState === "hidden" && ref.current) syncOnline(user, ref.current, clock(ref.current).day).catch(() => {}); };
+    // Coming back to a window: re-read the server save so a stale window never builds on old progress.
+    const onShow = () => { if (document.visibilityState === "visible" && loaded.current && alive) { loaded.current = false; if (id) clearInterval(id); id = undefined; load(); } };
+    const onHide = () => { if (loaded.current && document.visibilityState === "hidden" && ref.current) syncOnline(user, ref.current, clock(ref.current).day).catch(onSyncErr); };
+    document.addEventListener("visibilitychange", onShow);
     document.addEventListener("visibilitychange", onHide);
     return () => { alive = false; loaded.current = false; if (id) clearInterval(id); if (retry) clearTimeout(retry); document.removeEventListener("visibilitychange", onHide); };
   }, [user]);
