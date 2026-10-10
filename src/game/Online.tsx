@@ -7,6 +7,7 @@ import { add, weeklyFor, weeklyContribution, migrateSave, type GameState } from 
 import { blip } from "./sound";
 import { ensureSeason, seasonContribution } from "./world";
 import { Territories, Season } from "./OnlineWorld";
+import { rememberServerRev, nextRev, confirmRev, SAVE_CONFLICT, isConflict } from "./saveRev";
 
 type Mut = (fn: (g: GameState) => string | null | void) => void;
 /** True in the self-hosted (PHP server) download build: username accounts, no email. */
@@ -49,7 +50,9 @@ const nameOf = (u: User) => {
 export async function fetchCloudSave(user: User): Promise<GameState | null> {
   const { data, error } = await supabase.from("saves").select("state").eq("user_id", user.id).maybeSingle();
   if (error) throw new Error(error.message); // never mistake a failed read for "no save yet"
-  return data ? migrateSave(data.state as unknown as Partial<GameState>) : null;
+  const st = (data?.state ?? null) as unknown as Partial<GameState> | null;
+  rememberServerRev(st);
+  return st && typeof st === "object" ? migrateSave(st) : null;
 }
 
 export function ResetPassword({ onDone }: { onDone: () => void }) {
@@ -76,13 +79,16 @@ export function ResetPassword({ onDone }: { onDone: () => void }) {
   );
 }
 
-/** Pushes score + cloud save periodically. */
+/** Pushes score + cloud save periodically. Throws SAVE_CONFLICT when another window saved newer progress. */
 export async function syncOnline(user: User, s: GameState, day: number) {
+  const rev = nextRev();
+  const { error } = await supabase.rpc("save_put", { _state: { ...s, rev } as never });
+  if (error) throw new Error(isConflict(error.message) ? SAVE_CONFLICT : error.message);
+  confirmRev(rev); s.rev = rev;
   await supabase.from("profiles").upsert({ id: user.id, username: nameOf(user).slice(0, 24), score: scoreOf(s), day, level: s.level, updated_at: new Date().toISOString() });
   if (s.wk.week) await supabase.from("weekly_contrib").upsert({ week: s.wk.week, user_id: user.id, username: nameOf(user).slice(0, 24), amount: Math.min(100000, weeklyContribution(s)), updated_at: new Date().toISOString() });
   ensureSeason(s);
   if (s.sea) await supabase.from("season_contrib").upsert({ season: s.sea.key, user_id: user.id, username: nameOf(user).slice(0, 24), amount: Math.min(1000000, seasonContribution(s)), updated_at: new Date().toISOString() });
-  await supabase.from("saves").upsert({ user_id: user.id, state: s as never, updated_at: new Date().toISOString() });
 }
 
 export function OnlineTab({ s, mut, user, onLoadCloud, toast }: { s: GameState; mut: Mut; user: User | null; onLoadCloud: (g: GameState) => void; toast: (t: string) => void }) {
@@ -122,9 +128,10 @@ export function Account({ user, onLoadCloud, toast }: { user: User | null; onLoa
 
   if (user) {
     const loadCloud = async () => {
-      const { data } = await supabase.from("saves").select("state").eq("user_id", user.id).maybeSingle();
-      if (!data) return toast("Pilvesalvestust pole veel");
-      if (confirm("Laadi pilvesalvestus? Praegune kohalik progress asendatakse.")) onLoadCloud(migrateSave(data.state as unknown as Partial<GameState>));
+      if (!confirm("Laadi pilvesalvestus? Praegune kohalik progress asendatakse.")) return;
+      const g = await fetchCloudSave(user).catch(() => null);
+      if (!g) return toast("Pilvesalvestust pole veel");
+      onLoadCloud(g);
     };
     return (
       <div className="space-y-2">
