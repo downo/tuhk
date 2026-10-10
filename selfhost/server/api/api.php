@@ -92,7 +92,7 @@ function run_query(array $q) {
       if ($d && ($q['cols'] ?? '*') !== '*') $d = array_intersect_key($d, array_flip(array_map('trim', explode(',', (string)$q['cols']))));
       return !empty($q['single']) ? $d : ($d ? [$d] : []);
     }
-    if ($op === 'upsert') { save_write($u['id'], $q['values']['state'] ?? null); return null; }
+    if ($op === 'upsert') { save_write($u['id'], $q['values']['state'] ?? null, true); return null; }
     throw new ApiError('Not allowed');
   }
 
@@ -308,6 +308,7 @@ function run_rpc(string $fn, array $a) {
         $r = array_map(fn($x) => ['item' => $x['item'], 'qty' => (int)$x['qty']], $rows);
         break;
       }
+      case 'save_put': { save_write($uid, $a['_state'] ?? null, true); $r = true; break; }
       default: throw new ApiError('Unknown function');
     }
     $pdo->commit();
@@ -360,5 +361,6 @@ switch ($action) {
   default: fail('Unknown action');
 }
 } catch (ApiError $e) { fail($e->getMessage()); }
+  catch (SaveConflict $e) { fail('save_conflict', 409); }
   catch (Throwable $e) { error_log('tuhk api: ' . $e->getMessage()); fail('Serveri viga', 500); }
 
