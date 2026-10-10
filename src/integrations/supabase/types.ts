@@ -296,6 +296,30 @@ export type Database = {
         }
         Relationships: []
       }
+      save_backups: {
+        Row: {
+          created_at: string
+          id: string
+          reason: string
+          state: Json
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          reason: string
+          state: Json
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          reason?: string
+          state?: Json
+          user_id?: string
+        }
+        Relationships: []
+      }
       saves: {
         Row: {
           state: Json
@@ -391,6 +415,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      _save_buildings: { Args: { _s: Json }; Returns: number }
       _valid_item: { Args: { _i: string }; Returns: boolean }
       claim_territory: { Args: { _id: string }; Returns: Json }
       clan_raid: { Args: { _target: string }; Returns: Json }
@@ -446,6 +471,7 @@ export type Database = {
         }
         Returns: string
       }
+      save_put: { Args: { _state: Json }; Returns: boolean }
       stash_deposit: {
         Args: { _item: string; _qty: number }
         Returns: undefined
