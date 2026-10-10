@@ -1,0 +1,261 @@
+import { useEffect, useRef, useState } from "react";
+import type { User } from "@supabase/supabase-js";
+import { BAR_BUY, BAR_SELL, ENEMIES, ITEMS, REGIONS, BAR_REGION } from "./data";
+import {
+  atBar, barBuy, barSell, cardDraw, claimContract, contractProgress, contractsFor, hiloCashOut, hiloPay, playBottle, playDice, playRats, bountyFor, weekKey, type GameState,
+} from "./engine";
+import { PlayerQuests } from "./Online";
+import { Portrait } from "./portraits";
+import imgHero from "@/assets/bar/hero.jpg";
+import imgCounter from "@/assets/bar/counter.jpg";
+import imgBoard from "@/assets/bar/board.jpg";
+import imgGames from "@/assets/bar/games.jpg";
+
+type Mut = (fn: (g: GameState) => string | null | void) => void;
+const H = ({ children }: { children: React.ReactNode }) => <h2 className="px-title mb-2 mt-1 text-primary">&gt; {children}</h2>;
+const lbl = (id: string) => `${ITEMS[id].icon} ${ITEMS[id].name}`;
+type Sub = "counter" | "jobs" | "games" | "board";
+
+import { PARDI_JUTUD } from "./tekstid";
+// Pärdi jutud on failis tekstid.ts
+export const PART_LINES = PARDI_JUTUD;
+
+const SUBS: { id: Sub; label: string; hint: string; img: string }[] = [
+  { id: "counter", label: "🛒 Lett", hint: "osta · müü romu", img: imgCounter },
+  { id: "jobs", label: "📜 Lepingud", hint: "3 tööd päevas", img: imgBoard },
+  { id: "games", label: "🎲 Mängud", hint: "täring · rotid · pudel", img: imgGames },
+  { id: "board", label: "📌 Tellimused", hint: "teiste mängijate soovid", img: imgBoard },
+];
+
+export function BarTab({ s, mut, user, toast }: { s: GameState; mut: Mut; user: User | null; toast: (t: string) => void }) {
+  const [sub, setSub] = useState<Sub>("counter");
+  const here = atBar(s);
+  const cur = SUBS.find((x) => x.id === sub)!;
+  return (
+    <div className="space-y-3">
+      <div className="relative overflow-hidden border-2" style={{ borderColor: "var(--ember)" }}>
+        <img src={imgHero} alt="Roostes Kruusi kõrts" width={960} height={400} className="bar-flicker block h-40 w-full object-cover md:h-52" style={{ imageRendering: "pixelated" }} />
+        <div className="absolute inset-0" style={{ background: "linear-gradient(90deg, var(--soot) 0%, transparent 60%)" }} />
+        <div className="absolute bottom-0 left-0 p-3">
+          <div className="px-title bar-tan">&gt; Baar</div>
+          <div className="text-3xl bar-ember">«Roostes Kruus»</div>
+          <div className="text-sm text-muted-foreground">Varemete kelder · suits · roostes lett</div>
+        </div>
+        <div className="absolute right-2 top-2 border-2 px-2 py-0.5 text-lg" style={{ borderColor: "var(--ember)", background: "var(--soot)", color: "var(--ember-tan)" }}>🪙 {s.inv.cash || 0}</div>
+      </div>
+      {!here && <p className="bar-panel bar-ember">Baar asub piirkonnas {REGIONS[BAR_REGION].icon} {REGIONS[BAR_REGION].name}. Ränna sinna, et osta, müüa, mängida või lepingute tasu kätte saada.</p>}
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="bar-panel md:row-span-2">
+          <div className="flex flex-col items-start gap-2">
+            <Portrait id="part" icon="🧔" alt="Pärt, baarmen" size="lg" />
+            <div><div className="bar-ember text-xl">Pärt</div><div className="text-sm text-muted-foreground">baarmen · salapärane</div></div>
+          </div>
+          <p className="mt-2 text-base text-muted-foreground">Pika musta habemega mees, kes pühib klaasi, mis ei saa kunagi puhtaks.</p>
+          <PartTalk s={s} />
+        </div>
+        {SUBS.map((x) => (
+          <button key={x.id} data-on={sub === x.id ? "1" : "0"} className="bar-tile h-full min-h-28" onClick={() => setSub(x.id)}>
+            <img src={x.img} alt="" loading="lazy" width={480} height={325} />
+            <div className="bar-cap"><div className="text-lg">{x.label}</div><div className="text-xs text-muted-foreground">{x.hint}</div></div>
+          </button>
+        ))}
+      </div>
+      <div className="bar-panel">
+        <div className="px-title mb-3 bar-ember">&gt; {cur.label}</div>
+        {sub === "counter" && <Counter s={s} mut={mut} here={here} />}
+        {sub === "jobs" && <Jobs s={s} mut={mut} here={here} />}
+        {sub === "games" && <Games s={s} mut={mut} here={here} />}
+        {sub === "board" && (user ? <PlayerQuests s={s} mut={mut} user={user} toast={toast} /> : <p className="text-muted-foreground">Teiste mängijate tellimuste nägemiseks logi sisse: 🌐 Mitmikmäng → Konto.</p>)}
+      </div>
+    </div>
+  );
+}
+
+function PartTalk({ s }: { s?: GameState }) {
+  const [line, setLine] = useState<string | null>(null);
+  const wk = weekKey(new Date()); const b = ENEMIES[bountyFor(wk)];
+  return (
+    <div className="mt-3 space-y-2">
+      {s && <div className="border-l-2 p-2 text-base" style={{ borderColor: "var(--ember)", background: "var(--soot)" }}><div className="bar-tan text-sm">📜 PEARAHATAHVEL</div>{b.icon} {b.name} — <span className="bar-ember">50 🪙 + 100 XP</span><div className="text-sm text-muted-foreground">{s.bountyWeek === wk ? "✅ Selle nädala pearaha makstud." : "«Too mulle tõestust. Kõrv, saba, kroon — mis iganes tal on. Ainult mitte lõhn.»"}</div></div>}
+      <button className="px-btn w-full" onClick={() => setLine(PART_LINES[Math.floor(Math.random() * PART_LINES.length)])}>🗣️ Küsi Pärdilt nõu</button>
+      {line && <p className="fadein border-l-2 p-2 text-base italic bar-tan" style={{ borderColor: "var(--ember-tan)" }}>{line}</p>}
+    </div>
+  );
+}
+
+function Counter({ s, mut, here }: { s: GameState; mut: Mut; here: boolean }) {
+  const sellable = Object.keys(BAR_SELL).filter((k) => (s.inv[k] || 0) > 0);
+  return (
+    <div className="grid gap-3 md:grid-cols-2">
+      <div>
+        <h3 className="mb-1 bar-tan">Osta</h3>
+        <ul className="space-y-1">
+          {Object.entries(BAR_BUY).map(([id, p]) => (
+            <li key={id} className="px-row">
+              <span className="px-row-main">{lbl(id)} <span className="text-sm text-muted-foreground">(sul {s.inv[id] || 0})</span></span>
+              <span className="px-row-act">
+                <span className="font-bold text-accent">🪙{p}</span>
+                <button className="px-btn" disabled={!here || (s.inv.cash || 0) < p} onClick={() => mut((g) => barBuy(g, id))}>Osta</button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div>
+        <h3 className="mb-1 bar-tan">Müü romu</h3>
+        {!sellable.length && <p className="text-base text-muted-foreground">Sul pole midagi, mida Pärt ostaks.</p>}
+        <ul className="space-y-1">
+          {sellable.map((id) => { const [u, p] = BAR_SELL[id]; return (
+            <li key={id} className="px-row">
+              <span className="px-row-main">{lbl(id)} <span className="text-primary">×{s.inv[id]}</span> <span className="text-sm text-muted-foreground">· {u} tk → 🪙{p}</span></span>
+              <span className="px-row-act">
+                <button className="px-btn" disabled={!here} onClick={() => mut((g) => barSell(g, id, 1))}>Müü</button>
+                <button className="px-btn" disabled={!here} onClick={() => mut((g) => barSell(g, id, 999))}>Kõik</button>
+              </span>
+            </li>); })}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function Jobs({ s, mut, here }: { s: GameState; mut: Mut; here: boolean }) {
+  return (
+    <div>
+      <p className="mb-2 text-base text-muted-foreground">Pärt jagab iga mängupäev 3 lepingut. Kohaletoimetamise puhul too asjad baari; ülesannete edenemine loetakse tänasest alates.</p>
+      <ul className="space-y-1">
+        {contractsFor(s.bar.day).map((c) => {
+          const p = contractProgress(s, c); const done = s.bar.done.includes(c.id);
+          return (
+            <li key={c.id} className={`flex flex-wrap items-center gap-2 px-row ${done ? "text-muted-foreground" : ""}`}>
+              <span className="flex-1">{c.icon} {c.name} — {c.kind === "deliver" ? `too ${lbl(c.item!)} ×${c.n}` : `${c.n}×`} <span className="text-accent">{p}/{c.n}</span> <span className="text-base text-muted-foreground">· 🪙{c.cash} +{c.xp} XP</span></span>
+              {done ? <span className="text-primary">[✓]</span> : <button className="px-btn px-btn-primary" disabled={!here || p < c.n} onClick={() => mut((g) => claimContract(g, c.id))}>Anna üle</button>}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function Games({ s, mut, here }: { s: GameState; mut: Mut; here: boolean }) {
+  const [stake, setStake] = useState(5);
+  const [msg, setMsg] = useState<string>("");
+  const cash = s.inv.cash || 0;
+  const can = here && cash >= stake;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  type R = { err?: string; msg?: string } & Record<string, any>;
+  const run = (fn: (g: GameState) => R, after?: (r: R) => void) => {
+    let r: R | null = null;
+    mut((g) => { r = fn(g); return r.err ?? null; });
+    const res = r as R | null;
+    if (res && !res.err) { setMsg(res.msg ?? ""); after?.(res); }
+  };
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span>Panus:</span>
+        {[1, 5, 10, 25, 50].map((n) => <button key={n} className={`px-btn ${stake === n ? "px-btn-active" : ""}`} onClick={() => setStake(n)}>🪙{n}</button>)}
+      </div>
+      {msg && <p className="fadein border-2 border-accent p-2 text-accent">{msg}</p>}
+      <div className="grid gap-3 md:grid-cols-2">
+        <Dice can={can} onPlay={(after) => run((g) => playDice(g, stake), after)} />
+        <Rats can={can} onPlay={(pick, after) => run((g) => playRats(g, stake, pick), after)} />
+        <Bottle can={can} onPlay={(pos) => run((g) => playBottle(g, stake, pos))} />
+        <HiLo can={can} stake={stake} mut={mut} setMsg={setMsg} />
+      </div>
+      <p className="text-base text-muted-foreground">Pärt võtab alati oma osa — maja võidab pikas plaanis. Mängi mõõdukalt.</p>
+    </div>
+  );
+}
+
+const Box = ({ title, desc, children }: { title: string; desc: string; children: React.ReactNode }) => (
+  <div className="border-2 p-2" style={{ borderColor: "color-mix(in oklab, var(--ember-tan) 25%, transparent)", background: "var(--soot)" }}><div className="bar-ember">{title}</div><div className="mb-2 text-base text-muted-foreground">{desc}</div>{children}</div>
+);
+const FACES = ["", "⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
+
+function Dice({ can, onPlay }: { can: boolean; onPlay: (after: (r: { msg?: string; me?: number[]; him?: number[] }) => void) => void }) {
+  const [r, setR] = useState<{ me: number[]; him: number[] } | null>(null);
+  return (
+    <Box title="🎲 Täringud" desc="Kaks täringut sinul, kaks Pärtul. Suurem summa võidab ×2, viik tagastab panuse.">
+      {r && <div className="mb-2 text-3xl">Sina {r.me.map((d) => FACES[d]).join("")} · Pärt {r.him.map((d) => FACES[d]).join("")}</div>}
+      <button className="px-btn px-btn-primary" disabled={!can} onClick={() => onPlay((x) => x.me && setR({ me: x.me, him: x.him! }))}>Viska</button>
+    </Box>
+  );
+}
+
+function Rats({ can, onPlay }: { can: boolean; onPlay: (pick: number, after: (r: { msg?: string; winner?: number }) => void) => void }) {
+  const [pick, setPick] = useState(0); const [win, setWin] = useState<number | null>(null);
+  return (
+    <Box title="🐀 Rotivõistlus" desc="Vali rott. Kui see jõuab esimesena kohale, saad ×3,5.">
+      <div className="mb-2 space-y-1">
+        {[0, 1, 2, 3].map((i) => (
+          <button key={i} className={`px-btn block w-full text-left ${pick === i ? "px-btn-active" : ""}`} onClick={() => setPick(i)}>
+            🐀 nr {i + 1} {win === i && "🏁"}
+          </button>
+        ))}
+      </div>
+      <button className="px-btn px-btn-primary" disabled={!can} onClick={() => onPlay(pick, (x) => setWin(x.winner ?? null))}>Start!</button>
+    </Box>
+  );
+}
+
+function Bottle({ can, onPlay }: { can: boolean; onPlay: (pos: number) => void }) {
+  const [running, setRunning] = useState(false);
+  const [pos, setPos] = useState(0);
+  const raf = useRef(0); const t0 = useRef(0);
+  useEffect(() => {
+    if (!running) return;
+    t0.current = performance.now();
+    const loop = (t: number) => { setPos((Math.sin((t - t0.current) / 260) + 1) / 2); raf.current = requestAnimationFrame(loop); };
+    raf.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf.current);
+  }, [running]);
+  return (
+    <Box title="🍾 Pudelivise" desc="Peata liikuv nool keskel. Roheline ×2, täpselt keskel ×4.">
+      <div className="relative mb-2 h-6 border-2">
+        <div className="absolute inset-y-0 bg-primary/30" style={{ left: "38%", width: "24%" }} />
+        <div className="absolute inset-y-0 bg-primary" style={{ left: "46%", width: "8%" }} />
+        <div className="absolute inset-y-0 w-1 bg-accent" style={{ left: `calc(${pos * 100}% - 2px)` }} />
+      </div>
+      {running
+        ? <button className="px-btn px-btn-primary" onClick={() => { setRunning(false); onPlay(pos); }}>VISKA!</button>
+        : <button className="px-btn px-btn-primary" disabled={!can} onClick={() => setRunning(true)}>Võta pudel</button>}
+    </Box>
+  );
+}
+
+const CARD = ["", "Ä", "2", "3", "4", "5", "6", "7", "8", "9", "10", "P", "E", "K"];
+function HiLo({ can, stake, mut, setMsg }: { can: boolean; stake: number; mut: Mut; setMsg: (m: string) => void }) {
+  const [card, setCard] = useState<number | null>(null);
+  const [pot, setPot] = useState(0);
+  const start = () => {
+    let ok = false;
+    mut((g) => { const e = hiloPay(g, stake); ok = !e; return e; });
+    if (ok) { setCard(cardDraw()); setPot(stake); setMsg(""); }
+  };
+  const guess = (up: boolean) => {
+    if (card == null) return;
+    const next = cardDraw();
+    const wins = up ? 13 - card : card - 1;
+    const ok = up ? next > card : next < card;
+    if (!ok || wins === 0) { setMsg(`Kaart oli ${CARD[next]} — kaotasid 🪙${pot}.`); setCard(null); setPot(0); return; }
+    const np = Math.min(500, Math.max(pot + 1, Math.floor(pot * 0.9 * 13 / wins)));
+    setCard(next); setPot(np);
+  };
+  const cashOut = () => { const p = pot; mut((g) => hiloCashOut(g, p)); setMsg(`Võtsid välja 🪙${p}.`); setCard(null); setPot(0); };
+  return (
+    <Box title="🃏 Kõrgem või madalam" desc="Arva, kas järgmine kaart on kõrgem või madalam. Iga õige arvamus kasvatab potti. Viik kaotab.">
+      {card == null
+        ? <button className="px-btn px-btn-primary" disabled={!can} onClick={start}>Jaga kaart</button>
+        : <div className="space-y-2">
+            <div className="text-3xl">🂠 {CARD[card]} <span className="text-base text-accent">pott 🪙{pot}</span></div>
+            <div className="flex flex-wrap gap-1">
+              <button className="px-btn" onClick={() => guess(true)}>⬆ Kõrgem</button>
+              <button className="px-btn" onClick={() => guess(false)}>⬇ Madalam</button>
+              <button className="px-btn px-btn-primary" onClick={cashOut}>💰 Võta välja</button>
+            </div>
+          </div>}
+    </Box>
+  );
+}

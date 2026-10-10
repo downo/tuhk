@@ -1,0 +1,45 @@
+# TUHK — big content update
+
+User picked (all options): story ending + boss, achievements, companion (Väike Tom), more world content, visual travel map, item detail popups, new-player tutorial, polish pass.
+
+- [x] data.ts: new items (fish, voidshard, sealer), dungeon regions (depths1-3), enemies (lurker, hollow, boss heart), sealer recipe
+- [x] engine.ts: state fields (ach, tut, sealed, seenEnding, tomDay), fishing action, companion assist, boss rare spawn, sealRift, checkAch + ACHIEVEMENTS, save migration, new quests
+- [x] Game.tsx: achievements tab, SVG travel map, item detail modal, tutorial checklist, fishing + seal buttons, ending overlay, combat hit FX, companion UI
+- [x] Online.tsx: achievements + ending bonus in score
+- [x] styles.css: hit/pulse/fade animations
+- [x] Verified: build OK, Playwright smoke tests pass (map, popup, tutorial, fishing, seal, ending, achievements)
+- [x] AI hint radio (Vihjed tab) using game state context via server function
+- [x] Settings: text size, contrast, reduced motion (saved per device)
+- [x] Daily quests, statistics tab, weather effects, sound toggle
+- [x] Player chat (global + clan, realtime), weekly community challenge
+- [x] Base depth: 4 new structures, higher levels, defense panel, raids damage walls
+- [x] Compass/minimap in region panel
+- [x] Pets (tame weakened mutts), crafting tree view, KOIDIK codex fragments
+- [x] Bar (shop, sell junk, contracts, 4 minigames, caps currency), player request board, kennel + pet breeding
+
+# TUHK 2.0 (user plan, first wave)
+- [x] Expeditions (multi-stage, retreat/push, weekly goal)
+- [x] Perk tree (3 branches) + relics with random affixes
+- [x] "Täna" overview screen
+- [x] Factions + reputation, NPC story chains with choices, daily world events, collections, New Game+
+- [x] Clan territories (server-owned, bonuses) + monthly shared seasons (cloud + self-host)
+- [x] Gather/explore/fish/hunt moved from Base to Map; 5 dailies, Tuhkade tee 30-day path, secrets + knowledge journal
+- [x] Visuals + audio pass: sound engine (blips, per-region ambience, base music, log-line sounds), player portrait, night/weather overlays, journal icons, screen shake + dust impacts, button press feel, rift + clan pictures
+
+# Presentation refinement
+- [x] Map text fit: size action and information grids by available content width, wrap long names, and verify no card overflow in the browser.
+- [x] Add visual HUD meters with semantic colors and color-code journal event types; verified signed-in HUD, journal, no overflow or browser errors.
+- [x] Remove distracting background overlays and increase right-hand journal text.
+- [x] Redesign equipment presentation without changing equipment rules.
+- [x] Suggest faction-specific missions, exclusive equipment and consequential alliances (ideas only).
+
+# Combat/exploration/base synergy (user picked all 9)
+- [x] Weapon vs intent bonuses (spear vs charge, club vs smash)
+- [x] Region hazards in combat (radiation +2 rad/turn, flooded flee harder)
+- [x] Sneak attack before combat (armor noise)
+- [x] Expedition item-gated choices (bunker door: core)
+- [x] Expedition temporary camp (wood+food, 30% ambush)
+- [x] Weather on map: fog more caches + enemy strikes first; crystal storm eye 1 day
+- [x] Assign survivors to buildings (Tom garden, Liis infirmary, Archivist lab)
+- [x] Turret needs scrap ammo from chest
+- [x] Generator needs fuel
