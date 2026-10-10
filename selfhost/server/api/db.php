@@ -85,11 +85,66 @@ function save_read(string $uid): ?array {
   save_write($uid, $d['state']);
   return $d;
 }
-function save_write(string $uid, $state): void {
-  $json = json_encode(['user_id' => $uid, 'state' => $state, 'updated_at' => now()], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+class SaveConflict extends Exception {}
+
+/** Total building levels in a save; used to spot a write that would lose buildings. */
+function save_buildings($state): int {
+  $s = is_array($state) ? ($state['structures'] ?? []) : [];
+  $n = 0; if (is_array($s)) foreach ($s as $v) $n += max(0, (int)$v);
+  return $n;
+}
+
+/** Current stored state without the one-time import logic (for the overwrite guard). */
+function save_current(string $uid): ?array {
+  if (DB_DRIVER === 'mysql') {
+    $st = db()->prepare('SELECT state FROM saves WHERE user_id=?'); $st->execute([$uid]);
+    $r = $st->fetchColumn(); if ($r === false) return null;
+    $d = json_decode((string)$r, true); return is_array($d) ? $d : null;
+  }
+  $f = save_file($uid); if (!is_file($f)) return null;
+  $d = json_decode((string)file_get_contents($f), true);
+  return is_array($d) && is_array($d['state'] ?? null) ? $d['state'] : null;
+}
+
+/** Backups live in data/saves/backup/: one per day plus one before any write that loses buildings. */
+function backup_dir(): string { $d = dirname(DB_PATH) . '/saves/backup'; if (!is_dir($d)) @mkdir($d, 0770, true); return $d; }
+function backup_name(string $uid): string { return basename(save_file($uid), '.json'); }
+function save_backup(string $uid, array $state, string $tag): void {
+  $name = backup_name($uid);
+  $f = backup_dir() . "/$name-$tag.json";
+  @file_put_contents($f, json_encode(['user_id' => $uid, 'state' => $state, 'saved_at' => now()], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_INVALID_UTF8_SUBSTITUTE), LOCK_EX);
+  $all = glob(backup_dir() . "/$name-*.json") ?: [];
+  usort($all, fn($a, $b) => filemtime($b) <=> filemtime($a));
+  foreach (array_slice($all, 40) as $old) @unlink($old); // keep the 40 newest per player
+}
+function list_backups(string $uid): array {
+  $all = glob(backup_dir() . '/' . backup_name($uid) . '-*.json') ?: [];
+  usort($all, fn($a, $b) => filemtime($b) <=> filemtime($a));
+  return array_map(fn($f) => ['file' => basename($f), 'time' => gmdate('Y-m-d H:i', filemtime($f)), 'buildings' => save_buildings((json_decode((string)file_get_contents($f), true) ?: [])['state'] ?? [])], $all);
+}
+
+/**
+ * Writes a save. With $guard, refuses a write that was not based on the latest stored save
+ * (an old tab or device would otherwise roll the base back) and keeps backups before any loss.
+ */
+function save_write(string $uid, $state, bool $guard = false): void {
+  if (!is_array($state)) throw new Exception('Vigane salvestus');
+  $cur = save_current($uid);
+  if ($guard && $cur) {
+    $have = (int)($cur['rev'] ?? 0); $got = (int)($state['rev'] ?? 0);
+    if ($have > 0 && $got !== $have + 1) throw new SaveConflict('save_conflict');
+  }
+  if ($cur) {
+    if (save_buildings($state) < save_buildings($cur)) save_backup($uid, $cur, gmdate('Ymd-His') . '-enne-kadu');
+    $daily = backup_dir() . '/' . backup_name($uid) . '-' . gmdate('Ymd') . '.json';
+    if (!is_file($daily)) save_backup($uid, $cur, gmdate('Ymd'));
+  }
+  $flags = JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE;
+  $json = json_encode(['user_id' => $uid, 'state' => $state, 'updated_at' => now()], $flags | JSON_PRETTY_PRINT);
+  if ($json === false) throw new Exception('Salvestust ei saa kirjutada');
   if (strlen($json) > 3000000) throw new Exception('Salvestus liiga suur');
   if (DB_DRIVER === 'mysql') {
-    $st = json_encode($state, JSON_UNESCAPED_UNICODE); $t = now();
+    $st = json_encode($state, $flags); $t = now();
     $u = db()->prepare('UPDATE saves SET state=?, updated_at=? WHERE user_id=?'); $u->execute([$st, $t, $uid]);
     if ($u->rowCount() === 0) db()->prepare('INSERT IGNORE INTO saves(user_id, state, updated_at) VALUES (?,?,?)')->execute([$uid, $st, $t]);
     return;
