@@ -7,6 +7,7 @@ import {
   resolveEvent, save, canTame, tame, feedPet, renamePet, releasePet, kennelSlots, kennelStore, kennelTake, kennelRelease, breedPets, BREED_COST, BREED_COOLDOWN, WEATHER_FX, baseDefense, raidPower, repairStructure, repairCost, startBoss, bossReady, bountyFor, trophyCount, weekKey, isMini, isBoss, intentText, PHASES, MINI_FOR_DANGER, dailyFor, dailyProgress, claimDaily, weeklyFor, weeklyContribution, sealRift, skillLevel, startAction, tick, useItem, weaponDmg, weatherFor, seasonFor, PET_MUTS, wipe, xpForLevel, type GameState, stayAtBase, markInput, ESCAPE_ENERGY, buyInsurance, insuranceCost, automationOn, gameLog as log, lvl, sneakChance, genFueled, fuelGenerator, turretAmmo, stormEyeOpen, enterStormEye, isHotzone
 } from "./engine";
 import { OnlineTab, syncOnline, useOnlineUser, fetchCloudSave, ResetPassword, Account } from "./Online";
+import { SAVE_CONFLICT } from "./saveRev";
 import { blip, setScene, soundForLog, type Scene } from "./sound";
 import { BarTab } from "./Bar";
 import { WorldTab } from "./WorldTab";
@@ -138,7 +139,9 @@ export default function Game() {
       setToast("Mängisid vahepeal teises aknas või seadmes — laadisin uuema salvestuse."); setTimeout(() => setToast(null), 4000);
       load();
     };
-    const push = () => { if (loaded.current && ref.current && document.visibilityState === "visible") syncOnline(user, ref.current, clock(ref.current).day).catch(onSyncErr); };
+    let pending: Promise<unknown> = Promise.resolve();
+    const send = () => { pending = syncOnline(user, ref.current!, clock(ref.current!).day).catch(onSyncErr); };
+    const push = () => { if (loaded.current && ref.current && document.visibilityState === "visible") send(); };
     const load = async () => {
       let cloud: GameState | null;
       try { cloud = await fetchCloudSave(user); }
@@ -152,11 +155,11 @@ export default function Game() {
     };
     load();
     // Coming back to a window: re-read the server save so a stale window never builds on old progress.
-    const onShow = () => { if (document.visibilityState === "visible" && loaded.current && alive) { loaded.current = false; if (id) clearInterval(id); id = undefined; load(); } };
-    const onHide = () => { if (loaded.current && document.visibilityState === "hidden" && ref.current) syncOnline(user, ref.current, clock(ref.current).day).catch(onSyncErr); };
+    const onShow = () => { if (document.visibilityState === "visible" && loaded.current && alive) { loaded.current = false; if (id) clearInterval(id); id = undefined; pending.then(() => alive && load()); } };
+    const onHide = () => { if (loaded.current && document.visibilityState === "hidden" && ref.current) send(); };
     document.addEventListener("visibilitychange", onShow);
     document.addEventListener("visibilitychange", onHide);
-    return () => { alive = false; loaded.current = false; if (id) clearInterval(id); if (retry) clearTimeout(retry); document.removeEventListener("visibilitychange", onHide); };
+    return () => { alive = false; loaded.current = false; if (id) clearInterval(id); if (retry) clearTimeout(retry); document.removeEventListener("visibilitychange", onHide); document.removeEventListener("visibilitychange", onShow); };
   }, [user]);
 
   useEffect(() => { applyPrefs(loadPrefs()); }, []);
